@@ -24,7 +24,7 @@ if not current_platform.is_cuda():
                 allow_module_level=True)
 
 TEXT_ENGINE_ARGS = AsyncEngineArgs(
-    model="meta-llama/Llama-3.2-1B-Instruct",
+    model="facebook/opt-125m", # TEMP!!!  "meta-llama/Llama-3.2-1B-Instruct",
     enforce_eager=True,
     disable_log_requests=True,
 )
@@ -105,6 +105,8 @@ async def test_load(
     # TODO(rickyx): Remove monkeypatch once we have a better way to test V1
     # so that in the future when we switch, we don't have to change all the
     # tests.
+    
+    print("여기는 또 어디야 - test_load")
     with monkeypatch.context() as m, ExitStack() as after:
         m.setenv("VLLM_USE_V1", "1")
 
@@ -152,7 +154,7 @@ async def test_abort(
     engine_args: AsyncEngineArgs,
     prompt: PromptType,
 ):
-
+    print("여기는 어디야 - test_abort")
     with monkeypatch.context() as m, ExitStack() as after:
         m.setenv("VLLM_USE_V1", "1")
 
