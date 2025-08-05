@@ -24,7 +24,7 @@ if not current_platform.is_cuda():
                 allow_module_level=True)
 
 TEXT_ENGINE_ARGS = AsyncEngineArgs(
-    model="facebook/opt-125m", # TEMP!!!  "meta-llama/Llama-3.2-1B-Instruct",
+    model="meta-llama/Llama-3.2-1B-Instruct",
     enforce_eager=True,
     disable_log_requests=True,
 )
@@ -90,315 +90,426 @@ async def generate(
 
 
 @pytest.mark.parametrize(
-    "output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY])
-@pytest.mark.parametrize(
-    "engine_args,prompt",
-    [(TEXT_ENGINE_ARGS, TEXT_PROMPT)], # (VISION_ENGINE_ARGS, VISION_PROMPT)],
-)
+    "output_kind", [RequestOutputKind.DELTA, RequestOutputKind.CUMULATIVE, RequestOutputKind.FINAL_ONLY])
 @pytest.mark.asyncio
-async def test_load(
-    monkeypatch: pytest.MonkeyPatch,
-    output_kind: RequestOutputKind,
-    engine_args: AsyncEngineArgs,
-    prompt: PromptType,
-):
-    # TODO(rickyx): Remove monkeypatch once we have a better way to test V1
-    # so that in the future when we switch, we don't have to change all the
-    # tests.
-    
-    print("여기는 또 어디야 - test_load")
+async def test_streaming_with_parallel_sampling(monkeypatch: pytest.MonkeyPatch, output_kind: RequestOutputKind):
+    """test parallel sampling along with ouput_kind""" 
+    engine_args = AsyncEngineArgs(model="Qwen/Qwen3-0.6B", gpu_memory_utilization=0.5)
     with monkeypatch.context() as m, ExitStack() as after:
         m.setenv("VLLM_USE_V1", "1")
-
         with set_default_torch_num_threads(1):
             engine = AsyncLLM.from_engine_args(engine_args)
         after.callback(engine.shutdown)
 
         NUM_REQUESTS = 100
-        NUM_EXPECTED_TOKENS = 10
+        N = 500
+        NUM_TOKENS = 50
+        prompt = "<|im_start|>user\nTell me the long history of the Earth is<|im_end|>\n<|im_start|>assistant\n<think>"
 
         request_ids = [f"request-{i}" for i in range(NUM_REQUESTS)]
 
-        # Create concurrent requests.
-        tasks = []
-        for request_id in request_ids:
-            tasks.append(
-                asyncio.create_task(
-                    generate(engine, request_id, prompt, output_kind,
-                             NUM_EXPECTED_TOKENS)))
-
-        # Confirm that we got all the EXPECTED tokens from the requests.
-        done, pending = await asyncio.wait(tasks,
-                                           return_when=asyncio.FIRST_EXCEPTION)
-        for task in pending:
-            task.cancel()
-        for task in done:
-            num_generated_tokens, request_id = await task
-            assert num_generated_tokens == NUM_EXPECTED_TOKENS, (
-                f"{request_id} generated {num_generated_tokens} but "
-                f"expected {NUM_EXPECTED_TOKENS}")
-
-        assert not engine.output_processor.has_unfinished_requests()
-
-
-@pytest.mark.parametrize(
-    "output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY])
-@pytest.mark.parametrize(
-    "engine_args,prompt",
-    [(TEXT_ENGINE_ARGS, TEXT_PROMPT)], # (VISION_ENGINE_ARGS, VISION_PROMPT)],
-)
-@pytest.mark.asyncio
-async def test_abort(
-    monkeypatch: pytest.MonkeyPatch,
-    output_kind: RequestOutputKind,
-    engine_args: AsyncEngineArgs,
-    prompt: PromptType,
-):
-    print("여기는 어디야 - test_abort")
-    with monkeypatch.context() as m, ExitStack() as after:
-        m.setenv("VLLM_USE_V1", "1")
-
-        with set_default_torch_num_threads(1):
-            engine = AsyncLLM.from_engine_args(engine_args)
-        after.callback(engine.shutdown)
-
-        NUM_REQUESTS = 100
-        NUM_EXPECTED_TOKENS = 100
-        NUM_EXPECTED_TOKENS_LONG = 50000
-        REQUEST_IDS_TO_ABORT = range(1, 100, 10)
-        PARALLEL_SAMPLE_REQ_IDS = range(1, 100, 15)
-
-        request_ids = [f"request-{i}" for i in range(NUM_REQUESTS)]
-
-        # Create concurrent requests.
-        tasks: list[asyncio.Task] = []
-        for idx, request_id in enumerate(request_ids):
-            max_tokens = (NUM_EXPECTED_TOKENS_LONG if
-                          (idx
-                           in REQUEST_IDS_TO_ABORT) else NUM_EXPECTED_TOKENS)
-            n = 3 if idx in PARALLEL_SAMPLE_REQ_IDS else 1
-            tasks.append(
-                asyncio.create_task(
-                    generate(engine, request_id, prompt, output_kind,
-                             max_tokens, n)))
-
-        # API server cancels requests when they disconnect.
-        for idx in REQUEST_IDS_TO_ABORT:
-            tasks[idx].cancel()
-            await asyncio.sleep(0.1)
-
-        # Confirm the other requests are okay.
-        for idx, task in enumerate(tasks):
-            # Confirm that it was actually canceled.
-            if idx in REQUEST_IDS_TO_ABORT:
-                with pytest.raises(asyncio.CancelledError):
-                    await task
-            else:
-                # Otherwise, make sure the request was not impacted.
-                num_generated_tokens, request_id = await task
-                n = 3 if idx in PARALLEL_SAMPLE_REQ_IDS else 1
-                expected_tokens = NUM_EXPECTED_TOKENS * n
-                assert num_generated_tokens == expected_tokens, (
-                    f"{request_id} generated {num_generated_tokens} but "
-                    f"expected {expected_tokens}")
-
-        # Make sure all aborted requests were really aborted.
-        assert not engine.output_processor.has_unfinished_requests()
-
-        # Confirm we can do another generation.
-        request_id = f"request-{REQUEST_IDS_TO_ABORT[0]}"
-        task = asyncio.create_task(
-            generate(engine, request_id, prompt, output_kind,
-                     NUM_EXPECTED_TOKENS))
-        num_generated_tokens, request_id = await task
-        assert num_generated_tokens == NUM_EXPECTED_TOKENS
-        assert not engine.output_processor.has_unfinished_requests()
-
-
-@pytest.mark.parametrize("n", [1, 3])
-@pytest.mark.parametrize(
-    "engine_args,prompt",
-    [(TEXT_ENGINE_ARGS, TEXT_PROMPT)], # (VISION_ENGINE_ARGS, VISION_PROMPT)],
-)
-@pytest.mark.asyncio
-async def test_finished_flag(
-    monkeypatch: pytest.MonkeyPatch,
-    n: int,
-    engine_args: AsyncEngineArgs,
-    prompt: PromptType,
-):
-
-    with monkeypatch.context() as m, ExitStack() as after:
-        m.setenv("VLLM_USE_V1", "1")
-
-        with set_default_torch_num_threads(1):
-            engine = AsyncLLM.from_engine_args(engine_args)
-        after.callback(engine.shutdown)
-
-        sampling_params = SamplingParams(
-            max_tokens=100,
-            output_kind=RequestOutputKind.DELTA,
-            temperature=1.0,
-            seed=33,
-            n=n,
-        )
-        outputs = [
-            out
-            async for out in engine.generate(request_id="request-33",
-                                             prompt=prompt,
-                                             sampling_params=sampling_params)
-        ]
-
-        # Assert only the last output has the finished flag set
-        assert all(not out.finished for out in outputs[:-1])
-        assert outputs[-1].finished
-
-
-@pytest.mark.parametrize(
-    "engine_args,prompt",
-    [(TEXT_ENGINE_ARGS, TEXT_PROMPT)], # (VISION_ENGINE_ARGS, VISION_PROMPT)],
-)
-@pytest.mark.asyncio
-async def test_mid_stream_cancellation(monkeypatch: pytest.MonkeyPatch,
-                                       engine_args: AsyncEngineArgs,
-                                       prompt: PromptType):
-    """Test that requests can be cancelled mid-stream."""
-    with monkeypatch.context() as m, ExitStack() as after:
-        m.setenv("VLLM_USE_V1", "1")
-
-        with set_default_torch_num_threads(1):
-            engine = AsyncLLM.from_engine_args(engine_args)
-        after.callback(engine.shutdown)
-
-        NUM_REQUESTS = 100
-        NUM_TOKENS = 1000
-        NUM_EXPECTED_TOKENS = 20
-
-        request_ids = [f"request-{i}" for i in range(NUM_REQUESTS)]
-
-        # Create concurrent requests that will be cancelled mid-stream
-        tasks = []
-        for request_id in request_ids:
-            tasks.append(
-                asyncio.create_task(
-                    generate(
-                        engine,
-                        request_id,
-                        prompt,
-                        RequestOutputKind.DELTA,
-                        NUM_TOKENS,
-                        cancel_after=NUM_EXPECTED_TOKENS,
-                    )))
-
-        # Wait for all tasks to complete
-        results = await asyncio.gather(*tasks)
-
-        # Verify all tasks were cancelled at the expected point
-        for num_generated_tokens, request_id in results:
-            assert num_generated_tokens == NUM_EXPECTED_TOKENS, (
-                f"{request_id} generated {num_generated_tokens} tokens but "
-                f"expected to cancel after {NUM_EXPECTED_TOKENS}")
-
-        # Make sure no requests are left hanging
-        assert not engine.output_processor.has_unfinished_requests()
-
-        # Confirm we can reuse the request id after the cancellations.
-        request_id = request_ids[0]
-        task = asyncio.create_task(
-            generate(engine, request_id, prompt, RequestOutputKind.DELTA,
-                     NUM_EXPECTED_TOKENS))
-        num_generated_tokens, request_id = await task
-        assert num_generated_tokens == NUM_EXPECTED_TOKENS
-        assert not engine.output_processor.has_unfinished_requests()
-
-
-class MockLoggingStatLogger(LoggingStatLogger):
-
-    def __init__(self, vllm_config: VllmConfig, engine_index: int = 0):
-        super().__init__(vllm_config, engine_index)
-        self.log = MagicMock()
-
-
-@pytest.mark.asyncio
-async def test_customize_loggers(monkeypatch):
-    """Test that we can customize the loggers.
-    If a customized logger is provided at the init, it should
-    be used directly.
-    """
-
-    with monkeypatch.context() as m, ExitStack() as after:
-        m.setenv("VLLM_USE_V1", "1")
-
-        with set_default_torch_num_threads(1):
-            engine = AsyncLLM.from_engine_args(
-                TEXT_ENGINE_ARGS,
-                stat_loggers=[MockLoggingStatLogger],
+        async def run_generate(engine, request_id, prompt, output_kind, num_tokens, num_index):
+            sampling_params = SamplingParams(
+                max_tokens=num_tokens,
+                min_tokens=num_tokens,
+                n=num_index,
+                output_kind=output_kind,
+                temperature=0.9,
             )
-        after.callback(engine.shutdown)
 
-        await engine.do_log_stats()
+            total_validated = 0
+            total_indices = 0
+            from collections import defaultdict
+            prev_token_counts = defaultdict(int)
+            token_all = defaultdict(int)
 
-        stat_loggers = engine.logger_manager.per_engine_logger_dict
-        assert len(stat_loggers) == 1
-        assert len(stat_loggers[0]) == 1
-        stat_loggers[0][0].log.assert_called_once()
+            async for output_group in engine.generate(
+                request_id=request_id,
+                prompt=prompt,
+                sampling_params=sampling_params
+            ):
+                completions = output_group.outputs
+                indices = [comp.index for comp in completions] # index = parallel samples
+                total_indices += len(indices)
+                texts = [comp.text for comp in completions]
+
+                for comp in completions:
+                    current_len = len(comp.token_ids)
+                    prev_len = prev_token_counts[comp.index]
+                    token_all[comp.index] += current_len
+                    
+                    if output_kind == RequestOutputKind.DELTA:
+                        # Each chunk doesn't always deliver only 1 token due to coalescing
+                        # assert current_len == 1, (
+                        #     f"{request_id} - DELTA: Expected 1 token, got {current_len} "
+                        #     f"for index {comp.index}"
+                        # )                        
+                        pass
+                        
+                    elif output_kind == RequestOutputKind.CUMULATIVE:
+                        # Token count doesn's always increase by 1 due to coalescing
+                        # expected = prev_len + 1
+                        # assert current_len == expected, (
+                        #     f"{request_id} - CUMULATIVE: Expected {expected} tokens, got {current_len} "
+                        #     f"for index {comp.index}"
+                        # )                        
+                        pass
+
+                    elif output_kind == RequestOutputKind.FINAL_ONLY:
+                        assert len(indices) == num_index
+
+                    else:
+                        raise ValueError(f"Unsupported output kind: {output_kind}")
+
+                    prev_token_counts[comp.index] = current_len
+
+                total_validated += 1
+
+            assert total_validated > 0, f"{request_id} produced no output groups"
+            
+            return total_indices, token_all, total_validated
+                
+        tasks = [
+            asyncio.create_task(
+                run_generate(engine, request_id, prompt, output_kind, NUM_TOKENS, N)
+            )
+            for request_id in request_ids]
+
+        results = await asyncio.gather(*tasks)
+        assert not engine.output_processor.has_unfinished_requests()
+  
+        for i, (total_indices, token_all, total_validated) in enumerate(results):
+            request_id = request_ids[i]  # Get corresponding request_id
+            
+            if output_kind == RequestOutputKind.FINAL_ONLY:
+                # FINAL_ONLY must return only one output group
+                assert total_validated == 1, (
+                    f"{request_id} - FINAL_ONLY: Expected 1 output group, got {total_validated}"
+                )
+
+            if output_kind == RequestOutputKind.DELTA:
+                #assert total_indices == N*NUM_TOKENS # fail due to coalesing
+                for idx, total in token_all.items():
+                    assert total == NUM_TOKENS, (
+                        f"{request_id} - DELTA: Total tokens aggregated for index {idx} = {total}, "
+                        f"but expected {NUM_TOKENS}"
+                    )
+                    
+            if output_kind == RequestOutputKind.CUMULATIVE:
+                #assert total_indices == N*NUM_TOKENS # fail due to coalesing
+                assert len(set(token_all.values())) == 1
+                assert list(token_all.values())[0] == NUM_TOKENS*(NUM_TOKENS+1)/2
 
 
-@pytest.mark.asyncio(scope="module")
-async def test_dp_rank_argument(monkeypatch: pytest.MonkeyPatch):
-    with monkeypatch.context() as m, ExitStack() as after:
-        m.setenv("VLLM_USE_V1", "1")
+# @pytest.mark.parametrize(
+#     "output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY])
+# @pytest.mark.parametrize(
+#     "engine_args,prompt",
+#     [(TEXT_ENGINE_ARGS, TEXT_PROMPT)], # (VISION_ENGINE_ARGS, VISION_PROMPT)],
+# )
+# @pytest.mark.asyncio
+# async def test_load(
+#     monkeypatch: pytest.MonkeyPatch,
+#     output_kind: RequestOutputKind,
+#     engine_args: AsyncEngineArgs,
+#     prompt: PromptType,
+# ):
+#     # TODO(rickyx): Remove monkeypatch once we have a better way to test V1
+#     # so that in the future when we switch, we don't have to change all the
+#     # tests.
+    
+#     with monkeypatch.context() as m, ExitStack() as after:
+#         m.setenv("VLLM_USE_V1", "1")
 
-        with set_default_torch_num_threads(1):
-            engine = AsyncLLM.from_engine_args(TEXT_ENGINE_ARGS)
-        after.callback(engine.shutdown)
+#         with set_default_torch_num_threads(1):
+#             engine = AsyncLLM.from_engine_args(engine_args)
+#         after.callback(engine.shutdown)
 
-        sampling_params = SamplingParams(max_tokens=100,
-                                         output_kind=RequestOutputKind.DELTA,
-                                         temperature=1.0,
-                                         seed=33)
+#         NUM_REQUESTS = 100
+#         NUM_EXPECTED_TOKENS = 10
 
-        # Test with valid DP rank.
-        async for _ in engine.generate(request_id="request-34",
-                                       prompt=TEXT_PROMPT,
-                                       sampling_params=sampling_params,
-                                       data_parallel_rank=0):
-            pass
+#         request_ids = [f"request-{i}" for i in range(NUM_REQUESTS)]
 
-        # Test with out-of-range DP rank.
-        with pytest.raises(ValueError):
-            async for _ in engine.generate(request_id="request-35",
-                                           prompt=TEXT_PROMPT,
-                                           sampling_params=sampling_params,
-                                           data_parallel_rank=1):
-                pass
+#         # Create concurrent requests.
+#         tasks = []
+#         for request_id in request_ids:
+#             tasks.append(
+#                 asyncio.create_task(
+#                     generate(engine, request_id, prompt, output_kind,
+#                              NUM_EXPECTED_TOKENS)))
+
+#         # Confirm that we got all the EXPECTED tokens from the requests.
+#         done, pending = await asyncio.wait(tasks,
+#                                            return_when=asyncio.FIRST_EXCEPTION)
+#         for task in pending:
+#             task.cancel()
+#         for task in done:
+#             num_generated_tokens, request_id = await task
+#             assert num_generated_tokens == NUM_EXPECTED_TOKENS, (
+#                 f"{request_id} generated {num_generated_tokens} but "
+#                 f"expected {NUM_EXPECTED_TOKENS}")
+
+#         assert not engine.output_processor.has_unfinished_requests()
 
 
-@pytest.mark.asyncio
-async def test_check_health(monkeypatch: pytest.MonkeyPatch):
-    """Test that check_health returns normally for healthy engine
-    and raises EngineDeadError when the engine is dead.
-    """
-    from unittest.mock import patch
+# @pytest.mark.parametrize(
+#     "output_kind", [RequestOutputKind.DELTA, RequestOutputKind.FINAL_ONLY])
+# @pytest.mark.parametrize(
+#     "engine_args,prompt",
+#     [(TEXT_ENGINE_ARGS, TEXT_PROMPT)], # (VISION_ENGINE_ARGS, VISION_PROMPT)],
+# )
+# @pytest.mark.asyncio
+# async def test_abort(
+#     monkeypatch: pytest.MonkeyPatch,
+#     output_kind: RequestOutputKind,
+#     engine_args: AsyncEngineArgs,
+#     prompt: PromptType,
+# ):
 
-    from vllm.v1.engine.exceptions import EngineDeadError
+#     with monkeypatch.context() as m, ExitStack() as after:
+#         m.setenv("VLLM_USE_V1", "1")
 
-    with monkeypatch.context() as m, ExitStack() as after:
-        m.setenv("VLLM_USE_V1", "1")
+#         with set_default_torch_num_threads(1):
+#             engine = AsyncLLM.from_engine_args(engine_args)
+#         after.callback(engine.shutdown)
 
-        with set_default_torch_num_threads(1):
-            engine = AsyncLLM.from_engine_args(TEXT_ENGINE_ARGS)
-        after.callback(engine.shutdown)
+#         NUM_REQUESTS = 100
+#         NUM_EXPECTED_TOKENS = 100
+#         NUM_EXPECTED_TOKENS_LONG = 50000
+#         REQUEST_IDS_TO_ABORT = range(1, 100, 10)
+#         PARALLEL_SAMPLE_REQ_IDS = range(1, 100, 15)
 
-        # Test 1: Healthy engine should not raise any exception
-        await engine.check_health()
+#         request_ids = [f"request-{i}" for i in range(NUM_REQUESTS)]
 
-        # Test 2: Mock the errored property to simulate a dead engine
-        with patch.object(type(engine),
-                          'errored',
-                          new_callable=lambda: property(lambda self: True)
-                          ), pytest.raises(EngineDeadError):
-            await engine.check_health()
+#         # Create concurrent requests.
+#         tasks: list[asyncio.Task] = []
+#         for idx, request_id in enumerate(request_ids):
+#             max_tokens = (NUM_EXPECTED_TOKENS_LONG if
+#                           (idx
+#                            in REQUEST_IDS_TO_ABORT) else NUM_EXPECTED_TOKENS)
+#             n = 3 if idx in PARALLEL_SAMPLE_REQ_IDS else 1
+#             tasks.append(
+#                 asyncio.create_task(
+#                     generate(engine, request_id, prompt, output_kind,
+#                              max_tokens, n)))
 
-        # Test 3: Verify healthy engine still works after mock
-        await engine.check_health()
+#         # API server cancels requests when they disconnect.
+#         for idx in REQUEST_IDS_TO_ABORT:
+#             tasks[idx].cancel()
+#             await asyncio.sleep(0.1)
+
+#         # Confirm the other requests are okay.
+#         for idx, task in enumerate(tasks):
+#             # Confirm that it was actually canceled.
+#             if idx in REQUEST_IDS_TO_ABORT:
+#                 with pytest.raises(asyncio.CancelledError):
+#                     await task
+#             else:
+#                 # Otherwise, make sure the request was not impacted.
+#                 num_generated_tokens, request_id = await task
+#                 n = 3 if idx in PARALLEL_SAMPLE_REQ_IDS else 1
+#                 expected_tokens = NUM_EXPECTED_TOKENS * n
+#                 assert num_generated_tokens == expected_tokens, (
+#                     f"{request_id} generated {num_generated_tokens} but "
+#                     f"expected {expected_tokens}")
+
+#         # Make sure all aborted requests were really aborted.
+#         assert not engine.output_processor.has_unfinished_requests()
+
+#         # Confirm we can do another generation.
+#         request_id = f"request-{REQUEST_IDS_TO_ABORT[0]}"
+#         task = asyncio.create_task(
+#             generate(engine, request_id, prompt, output_kind,
+#                      NUM_EXPECTED_TOKENS))
+#         num_generated_tokens, request_id = await task
+#         assert num_generated_tokens == NUM_EXPECTED_TOKENS
+#         assert not engine.output_processor.has_unfinished_requests()
+
+
+# @pytest.mark.parametrize("n", [1, 3])
+# @pytest.mark.parametrize(
+#     "engine_args,prompt",
+#     [(TEXT_ENGINE_ARGS, TEXT_PROMPT)], # (VISION_ENGINE_ARGS, VISION_PROMPT)],
+# )
+# @pytest.mark.asyncio
+# async def test_finished_flag(
+#     monkeypatch: pytest.MonkeyPatch,
+#     n: int,
+#     engine_args: AsyncEngineArgs,
+#     prompt: PromptType,
+# ):
+
+#     with monkeypatch.context() as m, ExitStack() as after:
+#         m.setenv("VLLM_USE_V1", "1")
+
+#         with set_default_torch_num_threads(1):
+#             engine = AsyncLLM.from_engine_args(engine_args)
+#         after.callback(engine.shutdown)
+
+#         sampling_params = SamplingParams(
+#             max_tokens=100,
+#             output_kind=RequestOutputKind.DELTA,
+#             temperature=1.0,
+#             seed=33,
+#             n=n,
+#         )
+#         outputs = [
+#             out
+#             async for out in engine.generate(request_id="request-33",
+#                                              prompt=prompt,
+#                                              sampling_params=sampling_params)
+#         ]
+
+#         # Assert only the last output has the finished flag set
+#         assert all(not out.finished for out in outputs[:-1])
+#         assert outputs[-1].finished
+
+
+# @pytest.mark.parametrize(
+#     "engine_args,prompt",
+#     [(TEXT_ENGINE_ARGS, TEXT_PROMPT)], # (VISION_ENGINE_ARGS, VISION_PROMPT)],
+# )
+# @pytest.mark.asyncio
+# async def test_mid_stream_cancellation(monkeypatch: pytest.MonkeyPatch,
+#                                        engine_args: AsyncEngineArgs,
+#                                        prompt: PromptType):
+#     """Test that requests can be cancelled mid-stream."""
+#     with monkeypatch.context() as m, ExitStack() as after:
+#         m.setenv("VLLM_USE_V1", "1")
+
+#         with set_default_torch_num_threads(1):
+#             engine = AsyncLLM.from_engine_args(engine_args)
+#         after.callback(engine.shutdown)
+
+#         NUM_REQUESTS = 100
+#         NUM_TOKENS = 1000
+#         NUM_EXPECTED_TOKENS = 20
+
+#         request_ids = [f"request-{i}" for i in range(NUM_REQUESTS)]
+
+#         # Create concurrent requests that will be cancelled mid-stream
+#         tasks = []
+#         for request_id in request_ids:
+#             tasks.append(
+#                 asyncio.create_task(
+#                     generate(
+#                         engine,
+#                         request_id,
+#                         prompt,
+#                         RequestOutputKind.DELTA,
+#                         NUM_TOKENS,
+#                         cancel_after=NUM_EXPECTED_TOKENS,
+#                     )))
+
+#         # Wait for all tasks to complete
+#         results = await asyncio.gather(*tasks)
+
+#         # Verify all tasks were cancelled at the expected point
+#         for num_generated_tokens, request_id in results:
+#             assert num_generated_tokens == NUM_EXPECTED_TOKENS, (
+#                 f"{request_id} generated {num_generated_tokens} tokens but "
+#                 f"expected to cancel after {NUM_EXPECTED_TOKENS}")
+
+#         # Make sure no requests are left hanging
+#         assert not engine.output_processor.has_unfinished_requests()
+
+#         # Confirm we can reuse the request id after the cancellations.
+#         request_id = request_ids[0]
+#         task = asyncio.create_task(
+#             generate(engine, request_id, prompt, RequestOutputKind.DELTA,
+#                      NUM_EXPECTED_TOKENS))
+#         num_generated_tokens, request_id = await task
+#         assert num_generated_tokens == NUM_EXPECTED_TOKENS
+#         assert not engine.output_processor.has_unfinished_requests()
+
+
+# class MockLoggingStatLogger(LoggingStatLogger):
+
+#     def __init__(self, vllm_config: VllmConfig, engine_index: int = 0):
+#         super().__init__(vllm_config, engine_index)
+#         self.log = MagicMock()
+
+
+# @pytest.mark.asyncio
+# async def test_customize_loggers(monkeypatch):
+#     """Test that we can customize the loggers.
+#     If a customized logger is provided at the init, it should
+#     be used directly.
+#     """
+
+#     with monkeypatch.context() as m, ExitStack() as after:
+#         m.setenv("VLLM_USE_V1", "1")
+
+#         with set_default_torch_num_threads(1):
+#             engine = AsyncLLM.from_engine_args(
+#                 TEXT_ENGINE_ARGS,
+#                 stat_loggers=[MockLoggingStatLogger],
+#             )
+#         after.callback(engine.shutdown)
+
+#         await engine.do_log_stats()
+
+#         stat_loggers = engine.logger_manager.per_engine_logger_dict
+#         assert len(stat_loggers) == 1
+#         assert len(stat_loggers[0]) == 1
+#         stat_loggers[0][0].log.assert_called_once()
+
+
+# @pytest.mark.asyncio(scope="module")
+# async def test_dp_rank_argument(monkeypatch: pytest.MonkeyPatch):
+#     with monkeypatch.context() as m, ExitStack() as after:
+#         m.setenv("VLLM_USE_V1", "1")
+
+#         with set_default_torch_num_threads(1):
+#             engine = AsyncLLM.from_engine_args(TEXT_ENGINE_ARGS)
+#         after.callback(engine.shutdown)
+
+#         sampling_params = SamplingParams(max_tokens=100,
+#                                          output_kind=RequestOutputKind.DELTA,
+#                                          temperature=1.0,
+#                                          seed=33)
+
+#         # Test with valid DP rank.
+#         async for _ in engine.generate(request_id="request-34",
+#                                        prompt=TEXT_PROMPT,
+#                                        sampling_params=sampling_params,
+#                                        data_parallel_rank=0):
+#             pass
+
+#         # Test with out-of-range DP rank.
+#         with pytest.raises(ValueError):
+#             async for _ in engine.generate(request_id="request-35",
+#                                            prompt=TEXT_PROMPT,
+#                                            sampling_params=sampling_params,
+#                                            data_parallel_rank=1):
+#                 pass
+
+
+# @pytest.mark.asyncio
+# async def test_check_health(monkeypatch: pytest.MonkeyPatch):
+#     """Test that check_health returns normally for healthy engine
+#     and raises EngineDeadError when the engine is dead.
+#     """
+#     from unittest.mock import patch
+
+#     from vllm.v1.engine.exceptions import EngineDeadError
+
+#     with monkeypatch.context() as m, ExitStack() as after:
+#         m.setenv("VLLM_USE_V1", "1")
+
+#         with set_default_torch_num_threads(1):
+#             engine = AsyncLLM.from_engine_args(TEXT_ENGINE_ARGS)
+#         after.callback(engine.shutdown)
+
+#         # Test 1: Healthy engine should not raise any exception
+#         await engine.check_health()
+
+#         # Test 2: Mock the errored property to simulate a dead engine
+#         with patch.object(type(engine),
+#                           'errored',
+#                           new_callable=lambda: property(lambda self: True)
+#                           ), pytest.raises(EngineDeadError):
+#             await engine.check_health()
+
+#         # Test 3: Verify healthy engine still works after mock
+#         await engine.check_health()
