@@ -579,6 +579,7 @@ class MambaMixer2(MambaBase, CustomOp):
         if prefix_caching_enabled:
             # If prefix caching is enabled, retrieve the relevant variables
             # for prefill and decode
+            print("mambamixer2-그라나잇4가 이걸쓴다")
             last_state_idx_d, last_state_idx_p = torch.split(
                 attn_metadata.last_state_idx, [num_decodes, num_prefills],
                 dim=0)

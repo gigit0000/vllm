@@ -294,6 +294,7 @@ class MambaModelConfig(VerifyAndUpdateConfig):
         # override by prefix caching logic later)
         cache_config.mamba_block_size = model_config.max_model_len
 
+        print("config.py캐시 컨피그 전체: ", cache_config)
         # TODO(@tdoublep) find a better way to do this than whitelist
         MAMBA2_MODELS = [
             "BambaForCausalLM",
@@ -309,6 +310,7 @@ class MambaModelConfig(VerifyAndUpdateConfig):
                             "Its support for Mamba2 layers is experimental. "
                             "Please report any issues you may observe.")
             else:
+                print("아키텍처는: ", model_config.architecture) #WILL
                 logger.info("Hybrid or mamba-based model detected without "
                             "support for prefix caching: disabling.")
                 cache_config.enable_prefix_caching = False

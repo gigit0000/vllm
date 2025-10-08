@@ -108,6 +108,12 @@ class ShortConv(MambaBase, CustomOp):
         # since they stay the same and reused for all mamba layers in the same
         # iteration.
         attn_metadata: AttentionMetadata = forward_context.attn_metadata
+        
+        #WILL
+        assert self.cache_config is not None
+        mamba_block_size = self.cache_config.mamba_block_size
+        prefix_caching_enabled = self.cache_config.enable_prefix_caching
+        
         if attn_metadata is not None:
             assert isinstance(attn_metadata, dict)
             attn_metadata = attn_metadata[self.prefix]
@@ -130,6 +136,8 @@ class ShortConv(MambaBase, CustomOp):
             hidden_states = C * Bx
             contextualized_states, _ = self.out_proj(hidden_states)
             return contextualized_states
+        
+        print("short_conv.py num_prefills은???", attn_metadata.num_prefills )
 
         num_prefills = attn_metadata.num_prefills  # request count
         num_decodes = attn_metadata.num_decode_tokens  # token count (=request)

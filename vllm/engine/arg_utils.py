@@ -1565,7 +1565,9 @@ class EngineArgs:
             if self.enable_prefix_caching is None:
                 # Disable prefix caching default for hybrid models
                 # since the feature is still experimental.
+                print("arg_util 전여기가 잡히나: ", model_config.is_hybrid, self.enable_prefix_caching )
                 if model_config.is_hybrid:
+                    print("여기가 잡히나: ", model_config.is_hybrid, self.enable_prefix_caching )
                     self.enable_prefix_caching = False
                 else:
                     self.enable_prefix_caching = True

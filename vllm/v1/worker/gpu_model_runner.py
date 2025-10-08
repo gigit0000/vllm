@@ -4255,6 +4255,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin):
                         self.speculative_config.num_speculative_tokens
                         if self.speculative_config else 0),
                 )
+            print("gpu_model_runner여기서 어떻게 보이나", kv_cache_spec)
         ds_indexer_layers = get_layers_from_vllm_config(
             self.vllm_config, DeepseekV32IndexerCache)
         for layer_name, ds_indexer_module in ds_indexer_layers.items():
