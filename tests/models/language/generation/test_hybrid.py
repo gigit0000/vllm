@@ -34,7 +34,8 @@ HYBRID_MODELS = [
     "hmellor/tiny-random-BambaForCausalLM",
     "ibm-granite/granite-4.0-tiny-preview",
     "tiiuae/Falcon-H1-0.5B-Base",
-    "LiquidAI/LFM2-1.2B",
+    "LiquidAI/LFM2-1.2B",   #WILL-TEMP
+    "ibm-granite/granite-4.0-h-micro", #WILL-TEMP
     "tiny-random/qwen3-next-moe",
 ]
 
@@ -368,7 +369,7 @@ def _get_vLLM_output(vllm_runner,
     return outs, vllm_model
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[6]]) #WILL 3 to 6
+@pytest.mark.parametrize("model", [HYBRID_MODELS[3]]) #WILL 3 to 6
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -488,6 +489,7 @@ def test_apc_single_prompt_block_align_alignment(
     if mamba_block_size is None:
         mamba_block_size = 512
 
+    #NEED MODIFICATION -WILL
     mamba_block_size_multiplier = 10
     for offsets in [
             -3, 3, mamba_block_size // 4 + 3, mamba_block_size // 2 - 3
@@ -579,7 +581,7 @@ def test_apc_multiple_prompts_all_cached_outputs(
         )
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[6]]) #WILL
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
