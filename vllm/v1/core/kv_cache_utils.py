@@ -995,6 +995,8 @@ def _get_kv_cache_groups_uniform_page_size(
     Returns:
         The generated KVCacheGroupSpecs
     """
+    print()
+    print("kv_cache_utils - 여기서 KVCacheGroupSpecs이 결정")
     # Group all layers by kv_cache_spec.
     # E.g., 2 full attention layers and 3 sliding window attention layers,
     # -> (full.0, full.1), (sw.0, sw.1, sw.2).

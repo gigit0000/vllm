@@ -1483,12 +1483,14 @@ class ModelConfig:
         """
         Returns the mamba chunk size if it exists
         """
-        # used by e.g. Bamba, FalconH1, Granite, PLaMo2
-        chunk_size = getattr(self.hf_text_config, "mamba_chunk_size", None)
-        if chunk_size is None:
-            # used by e.g. Mamba2, NemotronH, Zamba
-            chunk_size = getattr(self.hf_text_config, "chunk_size", None)
-        return chunk_size
+        # mamba_chunk_size for e.g. Bamba, FalconH1, Granite, PLaMo2
+        # chunk_size for e.g. Mamba2, NemotronH, Zamba
+        # block_multiple_of for LFM2
+        for attr in ("mamba_chunk_size", "chunk_size", "block_multiple_of"):
+            if (chunk_size := getattr(self.hf_text_config, attr, None)) is not None:
+                return 2048 #강제
+        return None
+
 
     def get_multimodal_config(self) -> MultiModalConfig:
         """

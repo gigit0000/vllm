@@ -98,19 +98,42 @@ class KVCacheManager:
         self.prefix_cache_stats = PrefixCacheStats() if log_stats else None
 
         self.block_size: Optional[int] = None
+        #WILL - 임시
+        print()
+        print("kv_cache_groups에는 머가 있나: ", kv_cache_config.kv_cache_groups)
+        print()
         if self.enable_caching:
-            assert (
-                len(
-                    set(
-                        g.kv_cache_spec.block_size
-                        for g in kv_cache_config.kv_cache_groups
-                    )
-                )
-                == 1
-            ), "Only one block size is supported for now"
+            # assert (
+            #     len(
+            #         set(
+            #             g.kv_cache_spec.block_size
+            #             for g in kv_cache_config.kv_cache_groups
+            #         )
+            #     )
+            #     == 1
+            # ), "Only one block size is supported for now"
             self.block_size = kv_cache_config.kv_cache_groups[
                 0
             ].kv_cache_spec.block_size
+            print()
+            print("여기가 prefix_caching이 이네이블됐을때만 통과된다")
+            print("결정된 block_size ", self.block_size)
+            print()
+            print(f"""kv_cache_manager.py에서 강제 코멘트아웃
+                              # assert (
+            #     len(
+            #         set(
+            #             g.kv_cache_spec.block_size
+            #             for g in kv_cache_config.kv_cache_groups
+            #         )
+            #     )
+            #     == 1
+            # ), "Only one block size is supported for now"
+            # self.block_size = kv_cache_config.kv_cache_groups[
+            #     0
+            # ].kv_cache_spec.block_size
+                  """)
+            print()
 
             if dcp_world_size > 1:
                 assert len(kv_cache_config.kv_cache_groups) == 1

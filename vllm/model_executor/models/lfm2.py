@@ -484,9 +484,11 @@ class Lfm2ForCausalLM(
         quant_config = vllm_config.quant_config
         cache_config = vllm_config.cache_config
         lora_config = vllm_config.lora_config
-        assert not cache_config.enable_prefix_caching, (
-            "Lfm2 currently does not support prefix caching"
-        )
+        #WILL - remove prefix_caching blocker and add enable sign
+        # assert not cache_config.enable_prefix_caching, (
+        #     "Lfm2 currently does not support prefix caching"
+        # )
+        print("lfm2.py - LFM2 prefix caching 이네이블드 in lfm2.py")
 
         super().__init__()
         self.config = config

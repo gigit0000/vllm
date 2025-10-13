@@ -4599,6 +4599,10 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin):
                 )
 
             elif isinstance(attn_module, MambaBase):
+                #WILL - 여기가 mamba_block_size도 결정하고 kv cache하고 관련잇네
+                print()
+                print("gpu_model_runner-여시거 mamba blocksize 결정")
+                print()
                 if (
                     self.vllm_config.speculative_config is not None
                     and self.vllm_config.model_config.hf_config.model_type
@@ -4608,6 +4612,7 @@ class GPUModelRunner(LoRAModelRunnerMixin, KVConnectorModelRunnerMixin):
                         "Mamba with speculative decoding is not supported yet."
                     )
                 mamba_block_size = self.vllm_config.cache_config.mamba_block_size
+                #mamba_block_size =  256# 1024 #512 #강제 #self.vllm_config.cache_config.mamba_block_size
                 page_size_padded = self.vllm_config.cache_config.mamba_page_size_padded
                 kv_cache_spec[layer_name] = MambaSpec(
                     shapes=attn_module.get_state_shape(),

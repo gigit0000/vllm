@@ -302,6 +302,14 @@ class MambaModelConfig(VerifyAndUpdateConfig):
                     "Its support for Mamba2 layers is experimental. "
                     "Please report any issues you may observe."
                 )
+            #WILL add LFM2 here    
+            elif model_config.architecture == "Lfm2ForCausalLM":
+                logger.info(
+                    "Warning: LFM2 with prefix caching is set up. "
+                    "Its support is experimental. "
+                    "Please report any issues you may observe."
+                )
+                
             else:
                 logger.info(
                     "Hybrid or mamba-based model detected without "
@@ -353,6 +361,9 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
             dtype=kv_cache_dtype,
         ).page_size_bytes
 
+        print()
+        print("머가있나 attn_page_size_1_token: ", attn_page_size_1_token)
+
         model_cls, _ = ModelRegistry.resolve_model_cls(
             model_config.architecture,
             model_config=model_config,
@@ -382,6 +393,7 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
         else:
             kernel_block_alignment_size = 16
 
+
         if cache_config.enable_prefix_caching:
             # With prefix caching, select attention block size to
             # optimize for mamba kernel performance
@@ -410,6 +422,9 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
             chunk_size = lcm(base_chunk_size, kernel_block_alignment_size)
             attn_block_size = chunk_size * cdiv(attn_tokens_per_mamba_state, chunk_size)
             cache_config.mamba_block_size = attn_block_size
+            print()
+            print("config.py 그래서 mamba_block_size는??: ", cache_config.mamba_block_size)
+            print()
         else:
             # Without prefix caching, select minimum valid attention block size
             # to minimize mamba state padding
@@ -434,7 +449,11 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
 
         # compute new attention page size
         attn_page_size = cache_config.block_size * attn_page_size_1_token
-
+        # if cache_config.enable_prefix_caching: #WILL강제
+        #     attn_page_size = 6144 #WILL강제
+        #     cache_config.mamba_page_size_padded = attn_page_size
+        # else:
+        #     attn_page_size = cache_config.block_size * attn_page_size_1_token    
         assert attn_page_size >= mamba_page_size
 
         if attn_page_size == mamba_page_size:
@@ -446,6 +465,10 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
             cache_config.mamba_page_size_padded is None
             or cache_config.mamba_page_size_padded != attn_page_size
         ):
+            print()
+            print("attn_page_size가 어떤데: ", attn_page_size)
+            print("mamba_page_size가 어떤데: ", mamba_page_size)
+            print()
             cache_config.mamba_page_size_padded = attn_page_size
             mamba_padding_pct = (
                 100 * (attn_page_size - mamba_page_size) / mamba_page_size
