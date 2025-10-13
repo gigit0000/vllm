@@ -1488,7 +1488,7 @@ class ModelConfig:
         # block_multiple_of for LFM2
         for attr in ("mamba_chunk_size", "chunk_size", "block_multiple_of"):
             if (chunk_size := getattr(self.hf_text_config, attr, None)) is not None:
-                return 2048 #강제
+                return chunk_size
         return None
 
 
