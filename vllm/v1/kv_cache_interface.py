@@ -63,6 +63,12 @@ class AttentionSpec(KVCacheSpec):
 
     @property
     def page_size_bytes(self) -> int:
+        print("======kv_cache_interface파일======")
+        print("self.block_size: ", self.block_size)
+        print("self.num_kv_heads; ", self.num_kv_heads)
+        print("self.head_size: ", self.head_size)
+        print("get_dtype_size(self.dtype): ", get_dtype_size(self.dtype))
+        print("===========끝========")        
         return (
             2
             * self.block_size
@@ -247,6 +253,10 @@ class MambaSpec(KVCacheSpec):
             prod(shape) * get_dtype_size(dtype)
             for (shape, dtype) in zip(self.shapes, self.dtypes)
         )
+        print("======MambaSpec이다======")
+        print("====이게 mamba_page_size구하는데다")
+        print("self: ", self)
+        print("==========끝=======")
         if self.page_size_padded is not None:
             assert self.page_size_padded >= page_size
             return self.page_size_padded

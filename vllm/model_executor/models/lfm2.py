@@ -451,7 +451,7 @@ class Lfm2ForCausalLM(
         cls,
         vllm_config: "VllmConfig",
     ) -> tuple[torch.dtype, ...]:
-        return MambaStateDtypeCalculator.short_conv_state_dtype(
+        return MambaStateDtypeCalculator.short_conv_state_dtype(  #WILL 왜 보낸는거하고 받는거하고 내용이 반대지??? 맞는거다
             vllm_config.model_config.dtype,
             vllm_config.cache_config.mamba_cache_dtype,
         )

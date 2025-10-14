@@ -66,7 +66,7 @@ class MambaStateDtypeCalculator:
         model_dtype: Union[ModelDType, torch.dtype],
         mamba_cache_dtype: MambaDType,
     ) -> tuple[torch.dtype, ...]:
-        conv_state_dtype = get_kv_cache_torch_dtype(mamba_cache_dtype, model_dtype)
+        conv_state_dtype = get_kv_cache_torch_dtype(mamba_cache_dtype, model_dtype) ##WILL 2개를 보내서 최종 하나만 받는거고 순서도 맞다. 2번째거는 ssm용이다
         return (conv_state_dtype,)
 
     @classmethod

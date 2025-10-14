@@ -369,12 +369,18 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
             model_config=model_config,
         )
 
+        #WILL 강제
+        print("보내기전에 shape계싼값", model_cls.get_mamba_state_shape_from_config(vllm_config))
+        print("보재기전에 block_size계산값: model_config.max_model_len", model_config.max_model_len)
         # get mamba page size
         mamba_page_size = MambaSpec(
             shapes=model_cls.get_mamba_state_shape_from_config(vllm_config),
             dtypes=model_cls.get_mamba_state_dtype_from_config(vllm_config),
             block_size=model_config.max_model_len,
         ).page_size_bytes
+        
+        #WILL여기까진 오케 - 여기서 lfm2는 short_conv스펙을 보낸다 .이것도 맞다. ssm이 없으니까 short conv에 해당하는거만 받는다
+        print("쉐입 데타입 블로사이즈로 받아오는 바이트mamba_page_size: ", mamba_page_size) 
 
         # Model may be marked as is_hybrid
         #  but mamba is skipped via config,
@@ -393,7 +399,9 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
         else:
             kernel_block_alignment_size = 16
 
-
+        print("캐쉬_컨피그",cache_config )
+        print("모델_컨피그",model_config )
+        print()
         if cache_config.enable_prefix_caching:
             # With prefix caching, select attention block size to
             # optimize for mamba kernel performance
@@ -417,13 +425,16 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
                 return a * b // gcd(a, b)
 
             base_chunk_size = model_config.get_mamba_chunk_size()
+            print()
+            print("여기서 멀 받아오는데: ", base_chunk_size)
+            print()
             attn_tokens_per_mamba_state = cdiv(mamba_page_size, attn_page_size_1_token)
 
             chunk_size = lcm(base_chunk_size, kernel_block_alignment_size)
             attn_block_size = chunk_size * cdiv(attn_tokens_per_mamba_state, chunk_size)
             cache_config.mamba_block_size = attn_block_size
             print()
-            print("config.py 그래서 mamba_block_size는??: ", cache_config.mamba_block_size)
+            print("config.py 그래서 계사된 값은? mamba_block_size는??: ", cache_config.mamba_block_size)
             print()
         else:
             # Without prefix caching, select minimum valid attention block size
@@ -435,6 +446,24 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
             attn_block_size = kernel_block_alignment_size * cdiv(
                 mamba_page_size, kernel_block_alignment_size * attn_page_size_1_token
             )
+
+        # Override LFM2 for readibility TODO: refactoring
+        LFM2_SHORT_CONV_MODELS = [
+            "LiquidAI/LFM2-700M",
+            "LiquidAI/LFM2-1.2B",
+            "LiquidAI/LFM2-3B",
+            "LiquidAI/LFM2-40B",
+        ]
+        if cache_config.enable_prefix_caching and model_config.model in LFM2_SHORT_CONV_MODELS:
+            min_block_size = kernel_block_alignment_size  
+            attn_block_size = min_block_size * cdiv(
+                mamba_page_size, 
+                min_block_size * attn_page_size_1_token
+            )
+            cache_config.mamba_block_size = attn_block_size
+            print("최종 결정 attn_block_size: ", attn_block_size)
+            print("최종결정 cache_config.mamba_block_size: ", cache_config.mamba_block_size)
+
 
         # override attention block size if either (a) the
         # user has not set it or (b) the user has set it
