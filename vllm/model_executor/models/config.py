@@ -410,7 +410,7 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
             "LiquidAI/LFM2-40B",
             ]
         
-        if cache_config.enable_prefix_caching and model_config.model not in SHORT_CONV_MODELS:
+        if cache_config.enable_prefix_caching and model_config.model  in SHORT_CONV_MODELS:
             # With prefix caching, select attention block size to
             # optimize for mamba kernel performance
 
@@ -432,7 +432,7 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
             def lcm(a, b):
                 return a * b // gcd(a, b)
 
-            base_chunk_size = model_config.get_mamba_chunk_size()
+            base_chunk_size = 256  #model_config.get_mamba_chunk_size()
             print()
             print("여기서 멀 받아오는데: ", base_chunk_size)
             print()
@@ -446,11 +446,12 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
             print()
         elif cache_config.enable_prefix_caching and model_config.model in SHORT_CONV_MODELS:
             min_block_size = kernel_block_alignment_size  
-            attn_block_size = min_block_size * cdiv(
-                mamba_page_size, 
-                min_block_size * attn_page_size_1_token
-            )
-            cache_config.mamba_block_size = attn_block_size
+            # attn_block_size = min_block_size * cdiv(
+            #     mamba_page_size, 
+            #     min_block_size * attn_page_size_1_token
+            # )
+            attn_block_size = 16 #16384 # 1024
+            cache_config.mamba_block_size = 16 # attn_block_size
             print("최종 결정 attn_block_size: ", attn_block_size)
             print("최종결정 cache_config.mamba_block_size: ", cache_config.mamba_block_size)
             print("최종결정 cache_config.block_size: ", cache_config.block_size)                
