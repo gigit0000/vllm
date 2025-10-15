@@ -1486,11 +1486,11 @@ class ModelConfig:
         # mamba_chunk_size for e.g. Bamba, FalconH1, Granite, PLaMo2
         # chunk_size for e.g. Mamba2, NemotronH, Zamba
         # block_multiple_of for LFM2
-        for attr in ("mamba_chunk_size", "chunk_size", "block_multiple_of"):
+        for attr in ("mamba_chunk_size", "chunk_size"): #, "block_multiple_of"):
             if (chunk_size := getattr(self.hf_text_config, attr, None)) is not None:
                 # Put a smaller chunk size for LFM2
                 print("여기가 버그네 attr, chunksize", attr, chunk_size)
-                return chunk_size if attr != "block_multiple_of" else 512 # chunk_size  #WILL 임시// 8 틀렸다. 이거 건드리는게 아니다. 이건 conv용이 아니다
+                return chunk_size # if attr != "block_multiple_of" else 512 # !!!!chunk_size  #WILL 임시// 8 틀렸다. 이거 건드리는게 아니다. 이건 conv용이 아니다. 원복해야한다
         print("model.py에서 chunk_size: ", chunk_size)    
         return None
 
