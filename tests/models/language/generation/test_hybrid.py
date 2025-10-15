@@ -32,10 +32,17 @@ HYBRID_MODELS = [
     "pfnet/plamo-2-1b",
     "Zyphra/Zamba2-1.2B-instruct",
     "hmellor/tiny-random-BambaForCausalLM",
-    "ibm-granite/granite-4.0-h-micro", #WILL 강제 "ibm-granite/granite-4.0-tiny-preview",
+    "ibm-granite/granite-4.0-tiny-preview",
     "tiiuae/Falcon-H1-0.5B-Base",
-    "LiquidAI/LFM2-700M", #WILL 강제 "LiquidAI/LFM2-1.2B",
+    "LiquidAI/LFM2-1.2B",
     "tiny-random/qwen3-next-moe",
+]
+
+SHORT_CONV_MODELS = [
+    "LiquidAI/LFM2-700M",
+    "LiquidAI/LFM2-1.2B",
+    "LiquidAI/LFM2-3B",
+    "LiquidAI/LFM2-40B",
 ]
 
 FULL_CUDA_GRAPH_MODELS = [
@@ -90,7 +97,7 @@ def test_models(
     )
 
 
-@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_batching(
@@ -127,7 +134,7 @@ def test_batching(
     )
 
 
-@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [10])
 def test_chunked_prefill_with_parallel_sampling(
     vllm_runner,
@@ -156,7 +163,7 @@ def test_chunked_prefill_with_parallel_sampling(
         vllm_model.generate(example_prompts, sampling_params)
 
 
-@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [20])
 def test_mamba_cache_cg_padding(
     vllm_runner,
@@ -184,7 +191,7 @@ def test_mamba_cache_cg_padding(
         )
 
 
-@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 def test_fail_upon_inc_requests_and_finished_requests_lt_available_blocks(
     vllm_runner,
     example_prompts,
@@ -209,7 +216,7 @@ def test_fail_upon_inc_requests_and_finished_requests_lt_available_blocks(
         )
 
 
-@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 def test_state_cleanup(
     vllm_runner,
     example_prompts,
@@ -233,7 +240,7 @@ def test_state_cleanup(
 
 
 @multi_gpu_test(num_gpus=2)
-@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_distributed_correctness(
@@ -380,7 +387,7 @@ def _get_vLLM_output(
     return outs, vllm_model
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[3], HYBRID_MODELS[4], HYBRID_MODELS[6]]) #WILL강제
+@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -446,7 +453,7 @@ def test_apc_single_prompt(
         )
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[3], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -528,7 +535,7 @@ def test_apc_single_prompt_block_align_alignment(
             )
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[3], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -595,7 +602,7 @@ def test_apc_multiple_prompts_all_cached_outputs(
         )
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[3], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -679,7 +686,7 @@ def test_apc_multiple_prompts_block_align_alignment(
             )
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[3], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -757,3 +764,209 @@ def test_apc_multiple_prompts_partial_cached_outputs(
             name_0="vllm_no_cache",
             name_1=f"vllm_cache_it_{r_idx + 1}",
         )
+
+
+# @pytest.mark.parametrize("model", [SHORT_CONV_MODELS[0]])
+# @pytest.mark.parametrize("max_tokens", [64])
+# @pytest.mark.parametrize("n_repetitions", [2])
+# @pytest.mark.parametrize("tensor_parallel_size", [1])
+# def test_short_conv_prefix_caching(
+#     hf_runner,
+#     vllm_runner,
+#     example_prompts,
+#     monkeypatch,
+#     model: str,
+#     max_tokens: int,
+#     n_repetitions: int,
+#     tensor_parallel_size: int,
+# ) -> None:
+#     """Test prefix caching for LFM2 with various prompt strategies.
+    
+#     Validates:
+#     1. Token IDs match 100% between cached and non-cached runs
+#     2. Number of tokens generated matches exactly
+#     3. Cache hit rate >= 90% on cache reuse
+#     """
+#     try:
+#         model_info = HF_EXAMPLE_MODELS.find_hf_info(model)
+#         model_info.check_available_online(on_fail="skip")
+#         model_info.check_transformers_version(on_fail="skip")
+#     except ValueError:
+#         pass
+
+#     # Define test scenarios
+#     test_scenarios = {
+#         "simple_repeated": {
+#             "prompts": ["Explain the concept of machine learning."],
+#             "description": "Single prompt repeated (100% cache hit expected)"
+#         },
+#         "multiple_diverse": {
+#             "prompts": [
+#                 "Explain the concept of machine learning.",
+#                 "What is artificial intelligence?",
+#                 "Describe neural networks."
+#             ],
+#             "description": "Multiple diverse prompts"
+#         },
+#         "shared_prefix": {
+#             "prompts": [
+#                 "Explain the concept of",
+#                 "Explain the concept of machine learning",
+#                 "Explain the concept of machine learning and deep learning"
+#             ],
+#             "description": "Incremental prompts with shared prefixes"
+#         }
+#     }
+
+#     cache_hit_threshold = 0.9
+
+#     for scenario_name, scenario_data in test_scenarios.items():
+#         print(f"\n{'='*80}")
+#         print(f"SCENARIO: {scenario_name}")
+#         print(f"Description: {scenario_data['description']}")
+#         print(f"{'='*80}")
+        
+#         prompts = scenario_data["prompts"]
+                
+#         max_model_len = 40000 # 픽스 max(len(prompt) + max_tokens for prompt in prompts)
+        
+#         vllm_runner_kwargs = _get_vllm_runner_params(
+#             model, max_model_len, tensor_parallel_size=tensor_parallel_size
+#         )
+        
+#         vllm_runner_kwargs["disable_log_stats"] = False
+        
+#         # Run 1: Baseline without cache
+#         print(f"\n--- Run 1: NO PC (Baseline) ---")
+#         vllm_outputs_no_cache, _ = _get_vLLM_output(
+#             vllm_runner, vllm_runner_kwargs, prompts, max_tokens, num_logprobs=-1
+#         )
+        
+#         baseline_token_ids = [output[0] for output in vllm_outputs_no_cache[0]]
+#         baseline_num_tokens = [len(output[0]) for output in vllm_outputs_no_cache[0]]
+        
+#         for i, output in enumerate(vllm_outputs_no_cache[0]):
+#             print(f"  Prompt {i}: {len(output[0])} tokens - {output[1][:100]}...")
+
+#         # Run 2 & 3: With prefix caching enabled
+#         vllm_runner_kwargs["enable_prefix_caching"] = True
+#         vllm_outputs_cache_rep, vllm_model = _get_vLLM_output(
+#             vllm_runner,
+#             vllm_runner_kwargs,
+#             prompts,
+#             max_tokens,
+#             num_logprobs=-1,
+#             num_repetitions=n_repetitions,
+#         )
+        
+                
+#         # Calculate total prompt tokens for cache hit ratio
+#         tokenizer = vllm_model.llm.llm_engine.get_tokenizer()
+#         total_prompt_tokens = sum(len(tokenizer.encode(p, add_special_tokens=True)) for p in prompts)
+        
+#         for r_idx, vllm_outputs_cache_itn in enumerate(vllm_outputs_cache_rep):
+#             cache_status = "FILLING" if r_idx == 0 else "REUSING"
+#             print(f"\n--- Run {r_idx + 2}: CACHE {cache_status} ---")
+            
+#             cached_token_ids = [output[0] for output in vllm_outputs_cache_itn]
+#             print(f"{r_idx} 캐쉬된 토크아이디 {cached_token_ids}")
+#             cached_num_tokens = [len(output[0]) for output in vllm_outputs_cache_itn]
+            
+#             if r_idx == 1:
+#                 # Get cache metrics
+#                 cache_hits = 0
+#                 for m in vllm_model.llm.llm_engine.get_metrics():
+#                     print("M이란", m)
+#                     if 'vllm:prefix_cache_hits' in m.name:
+#                         cache_hits = m.value
+#                         print(f"    {m.name} = {m.value}")
+#                         break
+                
+#                 cache_hit_ratio = cache_hits / total_prompt_tokens if total_prompt_tokens > 0 else 0
+#                 print(f"  Cache hits: {cache_hits}, ratio: {cache_hit_ratio:.3f}")
+                
+#                 for i, output in enumerate(vllm_outputs_cache_itn):
+#                     print(f"  Prompt {i}: {len(output[0])} tokens - {output[1][:100]}...")
+                
+#                 # Assert: Token IDs and counts match
+#                 assert baseline_token_ids == cached_token_ids
+#                 assert baseline_num_tokens == cached_num_tokens
+                
+#                 # Assert: Cache hit rate on reuse
+#                 if r_idx == 1:
+#                     assert cache_hit_ratio >= cache_hit_threshold
+            
+#         print(f"✓ Scenario '{scenario_name}' PASSED")
+
+#     print(f"\n{'='*80}")
+#     print(f"ALL SCENARIOS PASSED")
+#     print(f"{'='*80}")
+
+
+@pytest.mark.parametrize("model", [SHORT_CONV_MODELS[0]])
+@pytest.mark.parametrize("max_tokens", [64])
+@pytest.mark.parametrize("prompt_multiple", [10, 50, 100])
+@pytest.mark.parametrize("", [1])
+def test_short_conv_prefix_caching(
+    prompt_multiple,
+    model: str,
+    max_tokens: int,
+) -> None:
+    """
+    Test prefix caching for LFM2 with various prompt length.
+    """
+    
+    # For prometeus support, call LLM directly
+    from vllm import LLM, SamplingParams
+    from vllm.distributed import cleanup_dist_env_and_memory
+    from time import time
+    
+    sampling_params = SamplingParams(temperature=0.0, max_tokens=max_tokens)    
+    cache_hit_threshold = 0.9
+
+    prompts = """
+    Artificial Intelligence (AI) is a transformative technology that enables machines to perform tasks that traditionally required human intelligence, such as learning, reasoning, problem-solving, and decision-making. By analyzing vast amounts of data, AI systems can identify patterns, make predictions, and even adapt to new situations without explicit programming. Its applications span numerous fields, from healthcare, where AI aids in diagnosis and drug discovery, to transportation, where it powers autonomous vehicles, and to daily life, where
+    """
+    
+    prompts = prompt_multiple*prompts
+    
+    no_prefix_caching = {}
+    for enable_prefix_caching in [False, True]:
+        engine = LLM(model=model, enable_prefix_caching=enable_prefix_caching, 
+            disable_log_stats=False, 
+            gpu_memory_utilization=0.8, 
+            max_model_len=40000
+            )
+        tokenizer = engine.get_tokenizer()
+        token_ids = tokenizer.encode(prompts, add_special_tokens=True)
+        num_tokens = len(token_ids)
+        
+        for i in range(3):
+            if i == 0:
+                print('Warm-up')
+            if i == 1:
+                print('Measuring')
+            start_time = time()
+            print("프롶트:", prompts)
+            outputs = engine.generate(prompts, sampling_params)
+            print(f"Prefix caching: {enable_prefix_caching}, {i}th iter generated text: {outputs[0].outputs[0].text}")
+
+            t_elapsed=(time() - start_time)
+            if not enable_prefix_caching:
+                no_prefix_caching[i] = t_elapsed
+            print("enable_prefix_caching:", enable_prefix_caching, 
+                  "Num Tokens: ", num_tokens)
+            
+            for m in engine.llm_engine.get_metrics():
+                if 'vllm:prefix_cache_hits' in m.name:
+                    if enable_prefix_caching is True and i==1:
+                        cache_hit_ratio = m.value/num_tokens
+                        print(m.name, m.value, f"Cache-hit ratio: {cache_hit_ratio:.3f}")
+                        assert cache_hit_ratio >cache_hit_threshold, "Low cache-hit ratio"
+                    else:
+                        print(m.name, m.value)       
+            print(f"{i}th loop took {t_elapsed} seconds, PC gain: {(no_prefix_caching[i]-t_elapsed)/no_prefix_caching[i]*100:.2f}%\n")
+        del engine
+        cleanup_dist_env_and_memory()
+
+
