@@ -114,11 +114,6 @@ class ShortConv(MambaBase, CustomOp):
         # since they stay the same and reused for all mamba layers in the same
         # iteration.
         attn_metadata: AttentionMetadata = forward_context.attn_metadata
-        
-        assert self.cache_config is not None
-        mamba_block_size = self.cache_config.mamba_block_size
-        print("\nshort_conv.py - mamba_block_size", mamba_block_size)   
-        prefix_caching_enabled = self.cache_config.enable_prefix_caching             
         if attn_metadata is not None:
             assert isinstance(attn_metadata, dict)
             attn_metadata = attn_metadata[self.prefix]
