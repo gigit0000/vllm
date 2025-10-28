@@ -132,8 +132,7 @@ class Mamba2AttentionMetadata:
     batch_ptr: Optional[torch.Tensor] = None
     token_chunk_offset_ptr: Optional[torch.Tensor] = None
 
-#WILL temp
-i = 0
+
 class Mamba2AttentionMetadataBuilder(
     BaseMambaAttentionMetadataBuilder[Mamba2AttentionMetadata]
 ):
@@ -160,7 +159,6 @@ class Mamba2AttentionMetadataBuilder(
                 dtype=torch.int32,
                 device=device,
             )
-            print("\n어텐션state_indices_tensor", self.state_indices_tensor)
             self.block_idx_last_scheduled_token = torch.empty(
                 (self.decode_cudagraph_max_bs,),
                 dtype=torch.int32,
@@ -171,7 +169,6 @@ class Mamba2AttentionMetadataBuilder(
                 dtype=torch.int32,
                 device=device,
             )
-    
 
     def build(
         self,
@@ -179,15 +176,9 @@ class Mamba2AttentionMetadataBuilder(
         common_attn_metadata: CommonAttentionMetadata,
         fast_build: bool = False,
     ) -> Mamba2AttentionMetadata:
-        
         num_reqs = common_attn_metadata.num_reqs
         seq_lens = common_attn_metadata.seq_lens
 
-
-        global i
-        i += 1
-        if i < 10:
-            print("\n넘버_리퀘, 시퀀_렝", num_reqs, seq_lens)
         query_start_loc_p = None
         seq_idx_p = None
         cu_chunk_seqlen_p = None
@@ -207,54 +198,31 @@ class Mamba2AttentionMetadataBuilder(
         if self.vllm_config.cache_config.enable_prefix_caching:
             # Return a tensor of shape (#requests, #max blocks)
             state_indices_tensor = common_attn_metadata.block_table_tensor
-            
-            if i < 10:
-                print("\n어텐션state_indices_tensor", state_indices_tensor)
             # Additional cache-related varaiables:
             mamba_block_size = self.kv_cache_spec.block_size
-            if i < 10:            
-                print("\n어텐션mamba_block_size", mamba_block_size)
             num_computed_tokens = common_attn_metadata.num_computed_tokens_cpu.to(
                 self.device
             )
-            if i < 10:
-                print("\n어텐션num_computed_tokens", num_computed_tokens)
             # Block index of the last computed token
-           
             block_idx_last_computed_token = (
                 cdiv(num_computed_tokens, mamba_block_size) - 1
             )
-            if i < 10:
-
-                print("\n어텐션block_idx_last_computed_token", block_idx_last_computed_token)             
             # which is <= block index for the first scheduled token
             block_idx_first_scheduled_token = (
                 cdiv(num_computed_tokens + 1, mamba_block_size) - 1
             )
-            if i < 10:
-
-                print("\nblock_idx_first_scheduled_token", block_idx_first_scheduled_token)
             # which is <= block index of the last scheduled token
             block_idx_last_scheduled_token = (
                 cdiv(common_attn_metadata.seq_lens, mamba_block_size) - 1
             )
-            if i < 10:
-
-                print("\n어텐션block_idx_last_scheduled_token", block_idx_last_scheduled_token)
             # -1 in case it's non-computed and causes later issues with indexing
             block_idx_last_computed_token = block_idx_last_computed_token.clamp(min=0)
-            if i < 10:
-
-                print("\n어텐션block_idx_last_computed_token", block_idx_last_computed_token)
         else:
             # Always return just a single block per each request:
             state_indices_tensor = common_attn_metadata.block_table_tensor[:, 0]
             # Additional cache-related varaiables:
             block_idx_last_scheduled_token = None
             block_idx_last_computed_token = None
-            if i < 10:
-
-                print("\n!!!리퀘스트가 하나의 블록에서 다 커버되는 경우!!!")
 
         num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
             split_decodes_and_prefills(
@@ -413,4 +381,3 @@ class Mamba2AttentionMetadataBuilder(
             num_computed_tokens_p=num_computed_tokens_p,
         )
         return attn_metadata
-
