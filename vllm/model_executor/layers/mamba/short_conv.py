@@ -114,6 +114,11 @@ class ShortConv(MambaBase, CustomOp):
         # since they stay the same and reused for all mamba layers in the same
         # iteration.
         attn_metadata: AttentionMetadata = forward_context.attn_metadata
+        
+        assert self.cache_config is not None
+        mamba_block_size = self.cache_config.mamba_block_size
+        print("\nshort_conv.py - mamba_block_size", mamba_block_size)   
+        prefix_caching_enabled = self.cache_config.enable_prefix_caching             
         if attn_metadata is not None:
             assert isinstance(attn_metadata, dict)
             attn_metadata = attn_metadata[self.prefix]
@@ -122,7 +127,17 @@ class ShortConv(MambaBase, CustomOp):
             conv_state = self_kv_cache[0].transpose(-1, -2)
             state_indices_tensor = attn_metadata.state_indices_tensor
             has_initial_states_p = attn_metadata.has_initial_states_p
+            
+            #WILL 추가
+            prep_initial_states = attn_metadata.prep_initial_states
+            chunk_size = attn_metadata.chunk_size
+            seq_idx_p = attn_metadata.seq_idx_p
+            query_start_loc_p = attn_metadata.query_start_loc_p
+            cu_chunk_seqlen_p = attn_metadata.cu_chunk_seqlen_p
+            last_chunk_indices_p = attn_metadata.last_chunk_indices_p            
 
+        if 'query_start_loc_p' in locals():
+            print("\n이게이상query_start_loc_p", query_start_loc_p)
         BCx, _ = self.in_proj(hidden_states)
 
         B, C, x = BCx.chunk(3, dim=-1)
@@ -169,32 +184,146 @@ class ShortConv(MambaBase, CustomOp):
             [num_decodes, num_prefills],
             dim=0,
         )
-        query_start_loc_p = (
-            attn_metadata.query_start_loc[-num_prefills - 1 :] - num_decodes
-            if has_prefill
-            else None
-        )
+        
+        
+
+        if prefix_caching_enabled:
+            # If prefix caching is enabled, retrieve the relevant variables
+            # for prefill and decode
+            # 여기서 프리픽스캐싱된 걸 가져온다 - mamba2_attn에서 가져오는듯
+            
+            # print("\n이값은 메타데이터의 block_idx_last_computed_token", attn_metadata.block_idx_last_computed_token)
+            
+            block_idx_last_computed_token_d, block_idx_last_computed_token_p = (
+                torch.split(
+                    attn_metadata.block_idx_last_computed_token,
+                    [num_decodes, num_prefills],
+                    dim=0,
+                )
+            )
+            
+            # print("\n이값은 메타데이터의 block_idx_last_scheduled_token", attn_metadata.block_idx_last_scheduled_token)
+            block_idx_last_scheduled_token_d, block_idx_last_scheduled_token_p = (
+                torch.split(
+                    attn_metadata.block_idx_last_scheduled_token,
+                    [num_decodes, num_prefills],
+                    dim=0,
+                )
+            )
+            # Prefill-only variables:
+            block_idx_first_scheduled_token_p = (
+                attn_metadata.block_idx_first_scheduled_token_p
+            )
+            
+            #print("\n이값은 메타데이터의 block_idx_first_scheduled_token_p", block_idx_first_scheduled_token_p)
+            
+            num_computed_tokens_p = attn_metadata.num_computed_tokens_p
+            
+            #print("\n이미계산된토큰", num_computed_tokens_p)
+            if num_computed_tokens_p != None and seq_idx_p != None:
+                print("\n해당인텍스의 이미계산된토큰: ", num_computed_tokens_p[seq_idx_p])
+        else:
+            block_idx_last_computed_token_d = None
+            block_idx_last_computed_token_p = None
+            block_idx_last_scheduled_token_d = None
+            block_idx_last_scheduled_token_p = None
+            block_idx_first_scheduled_token_p = None
+            num_computed_tokens_p = None
+
+        # Preallocate output tensor to avoid memcpy cost for merging prefill
+        # and decode outputs
+        # preallocated_ssm_out = torch.empty(
+        #     [
+        #         num_prefill_tokens + num_decodes,
+        #         (self.num_heads // self.tp_size) * self.head_dim,
+        #     ],
+        #     dtype=hidden_states.dtype,
+        #     device=hidden_states.device,
+        # )
+        # preallocated_ssm_out_d, preallocated_ssm_out_p = torch.split(
+        #     preallocated_ssm_out,
+        #     [num_decodes, num_prefill_tokens],
+        #     dim=0,
+        # )        
+        
+        
+        #WILL 여기가 먼가 - 이건 attn쪽에서 결국처리해줘서 non-pc때는 동작함
+        # query_start_loc_p = (
+        #     attn_metadata.query_start_loc[-num_prefills - 1 :] - num_decodes
+        #     if has_prefill
+        #     else None
+        # )
 
         conv_output_list = []
 
+        print("\n차이가나기직전뽀스트스케줄: ", block_idx_first_scheduled_token_p)
+        print("\n!!!이게문제인듯!!!차이가나기직전라스트스케줄: ", block_idx_last_scheduled_token_p)
+        
         if has_prefill:
             Bx_p = (B_p * x_p).transpose(0, 1)
             Bx = causal_conv1d_fn(
                 Bx_p,
+            #WILL 강제로    
+            #     conv_weights,
+            #     self.conv.bias,
+            #     activation=None,
+            #     conv_states=conv_state,
+            #     has_initial_state=has_initial_states_p,
+            #     cache_indices=state_indices_tensor_p,
+            #     metadata=attn_metadata,
+            #     query_start_loc=query_start_loc_p,
+            # ).transpose(0, 1)[:num_prefill_tokens]
+            #WILL 이걸넣으니깐 pc에서 첫번째 출력도 다르게나온다
                 conv_weights,
-                self.conv.bias,
-                activation=None,
+                self.conv.bias, #WILL !!이게다르구나
+                activation=None, #WILL 변경
                 conv_states=conv_state,
                 has_initial_state=has_initial_states_p,
                 cache_indices=state_indices_tensor_p,
+                #WILL 이 2개를 수정하는까 pc에서 첫번째 출력은 고정되서 나온다. revision- block_idx_last_scheduled_token를 넣으면 첫번째출력이 깨진다
+                #block_idx_first_scheduled_token=None,
+                block_idx_first_scheduled_token=block_idx_first_scheduled_token_p,
+                #block_idx_last_scheduled_token=None,
+                block_idx_last_scheduled_token=(block_idx_last_scheduled_token_p if block_idx_last_scheduled_token_p is not None else None),
+                initial_state_idx=block_idx_last_computed_token_p, #이게 꽉 찬 블록들 중 마지막 블록의 인덱스다! 
+                num_computed_tokens=num_computed_tokens_p,
+                block_size_to_align=mamba_block_size, #왜 이건 빼나 넣으나 똑같나. 트리톤에서 BLOCK_M으로 지정한다 BLOCK_M=8이지정. 결국 16하고 8하고 결과는 똑같다. 이건 performance관련.
                 metadata=attn_metadata,
                 query_start_loc=query_start_loc_p,
-            ).transpose(0, 1)[:num_prefill_tokens]
+            ).transpose(0, 1)[:num_prefill_tokens]         #!!!num_prefill_tokens 이게 실제로 계산되야하는 토큰 갯수를 말하는듯. 즉 마지막블락의 토큰 갯수   
 
             y = C_p * Bx
             conv_output_list.append(y)
+            print("\n컨브아웃풋리스트", conv_output_list)
+            
+            print(f"\n[DEBUG] {self.prefix} - conv_output_list length:", len(conv_output_list))
+            if len(conv_output_list) > 0:
+                print(f"[DEBUG] {self.prefix} - first element shape: {tuple(conv_output_list[0].shape)}")
+        
+            
+        # 여기에서 차이가 나느것 같다. 이걸알려면 ssm과의 차이를 알아야하는데, 여기가 문제가 있을수가 없는데. 아니면 커널로 갓 인터피어한다    
 
         if has_decode:
+            print("\n이건 해즈디코딩")       
+
+            if prefix_caching_enabled:
+                state_indices_tensor_d_input = state_indices_tensor_d.gather(
+                    1, block_idx_last_computed_token_d.unsqueeze(1)
+                ).squeeze(1)
+                state_indices_tensor_d_output = state_indices_tensor_d.gather(
+                    1, block_idx_last_scheduled_token_d.unsqueeze(1)
+                ).squeeze(1)
+                # for decode:
+                #   block_idx_first_scheduled_token_d ==
+                #       block_idx_last_scheduled_token_d
+                # at block boundaries:
+                #   block_idx_first_scheduled_token_d >
+                #       block_idx_last_computed_token_d
+            else:
+                # Without caching, read and write in-place to the same blocks:
+                state_indices_tensor_d_input = state_indices_tensor_d
+                state_indices_tensor_d_output = state_indices_tensor_d
+            
             Bx_d = (B_d * x_d).contiguous()
             Bx = causal_conv1d_update(
                 Bx_d,
@@ -203,7 +332,12 @@ class ShortConv(MambaBase, CustomOp):
                 self.conv.bias,
                 activation=None,
                 conv_state_indices=state_indices_tensor_d,
+                #WILL 여기추가
+                block_idx_last_scheduled_token=block_idx_last_scheduled_token_d,
+                initial_state_idx=block_idx_last_computed_token_d                
             )
+            
+            
             y = C_d * Bx
             conv_output_list.insert(0, y)
 
