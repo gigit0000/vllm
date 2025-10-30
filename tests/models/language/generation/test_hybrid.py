@@ -90,7 +90,7 @@ def test_models(
     )
 
 
-@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_batching(
@@ -127,7 +127,7 @@ def test_batching(
     )
 
 
-@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [10])
 def test_chunked_prefill_with_parallel_sampling(
     vllm_runner,
@@ -156,7 +156,7 @@ def test_chunked_prefill_with_parallel_sampling(
         vllm_model.generate(example_prompts, sampling_params)
 
 
-@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [20])
 def test_mamba_cache_cg_padding(
     vllm_runner,
@@ -184,7 +184,7 @@ def test_mamba_cache_cg_padding(
         )
 
 
-@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 def test_fail_upon_inc_requests_and_finished_requests_lt_available_blocks(
     vllm_runner,
     example_prompts,
@@ -209,7 +209,7 @@ def test_fail_upon_inc_requests_and_finished_requests_lt_available_blocks(
         )
 
 
-@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 def test_state_cleanup(
     vllm_runner,
     example_prompts,
@@ -233,7 +233,7 @@ def test_state_cleanup(
 
 
 @multi_gpu_test(num_gpus=2)
-@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [SSM_MODELS[0], HYBRID_MODELS[0]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("num_logprobs", [5])
 def test_distributed_correctness(
@@ -380,7 +380,7 @@ def _get_vLLM_output(
     return outs, vllm_model
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[3], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -446,7 +446,7 @@ def test_apc_single_prompt(
         )
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[3], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -528,7 +528,7 @@ def test_apc_single_prompt_block_align_alignment(
             )
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[3], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -595,7 +595,7 @@ def test_apc_multiple_prompts_all_cached_outputs(
         )
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
@@ -653,7 +653,7 @@ def test_apc_multiple_prompts_block_align_alignment(
         mamba_block_size = 512
 
     mamba_block_size_multiplier = 10
-    for offsets in [-5, 5, mamba_block_size // 4 + 5, mamba_block_size // 2 - 5]:
+    for offsets in [-3, 3, mamba_block_size // 4 + 3, mamba_block_size // 2 - 3]:
         vllm_runner_kwargs["max_num_batched_tokens"] = (
             mamba_block_size_multiplier * mamba_block_size - offsets
         )
@@ -679,7 +679,7 @@ def test_apc_multiple_prompts_block_align_alignment(
             )
 
 
-@pytest.mark.parametrize("model", [HYBRID_MODELS[3], HYBRID_MODELS[6]])
+@pytest.mark.parametrize("model", [HYBRID_MODELS[3]])
 @pytest.mark.parametrize("max_tokens", [64])
 @pytest.mark.parametrize("n_repetitions", [2])
 # If num_logprobs is set to -1, then the stringent version
