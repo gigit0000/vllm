@@ -595,6 +595,10 @@ class MambaMixer2(MambaBase, CustomOp):
         if prefix_caching_enabled:
             # If prefix caching is enabled, retrieve the relevant variables
             # for prefill and decode
+            # 여기서 프리픽스캐싱된 걸 가져온다 - mamba2_attn에서 가져오는듯
+            
+            # print("\n이값은 메타데이터의 block_idx_last_computed_token", attn_metadata.block_idx_last_computed_token)
+            
             block_idx_last_computed_token_d, block_idx_last_computed_token_p = (
                 torch.split(
                     attn_metadata.block_idx_last_computed_token,
@@ -602,6 +606,8 @@ class MambaMixer2(MambaBase, CustomOp):
                     dim=0,
                 )
             )
+            
+            # print("\n이값은 메타데이터의 block_idx_last_scheduled_token", attn_metadata.block_idx_last_scheduled_token)
             block_idx_last_scheduled_token_d, block_idx_last_scheduled_token_p = (
                 torch.split(
                     attn_metadata.block_idx_last_scheduled_token,
@@ -613,7 +619,14 @@ class MambaMixer2(MambaBase, CustomOp):
             block_idx_first_scheduled_token_p = (
                 attn_metadata.block_idx_first_scheduled_token_p
             )
+            
+            #print("\n이값은 메타데이터의 block_idx_first_scheduled_token_p", block_idx_first_scheduled_token_p)
+            
             num_computed_tokens_p = attn_metadata.num_computed_tokens_p
+            
+            #print("\n이미계산된토큰", num_computed_tokens_p)
+            if num_computed_tokens_p != None and seq_idx_p != None:
+                print("\n해당인텍스의 이미계산된토큰: ", num_computed_tokens_p[seq_idx_p])
         else:
             block_idx_last_computed_token_d = None
             block_idx_last_computed_token_p = None
@@ -726,17 +739,30 @@ class MambaMixer2(MambaBase, CustomOp):
                     block_idx_first_scheduled_token = block_idx_first_scheduled_token_p[
                         seq_idx
                     ]
+                    print("\n블록인덱스뻐스트스케줄드토큰", block_idx_first_scheduled_token)
 
                     # Block index for the last scheduled token
                     block_idx_last_scheduled_token = block_idx_last_scheduled_token_p[
                         seq_idx
                     ]
+                    
+                    print("\n블록인덱스라스트스케줄드토큰", block_idx_last_scheduled_token)
 
                     # Number of blocks that need to be written
                     n_blocks_to_fill = (
                         block_idx_last_scheduled_token - block_idx_first_scheduled_token
                     )
 
+                    # !!!여기도 벅
+                    # n_blocks_to_fill = (
+                    #     block_idx_last_scheduled_token - block_idx_first_scheduled_token + 1
+                    # )
+                    # cache_blocks_to_fill = state_indices_tensor_p[
+                    #     seq_idx,
+                    #     block_idx_first_scheduled_token:block_idx_last_scheduled_token + 1,
+                    # ]                    
+
+                    print("\n넘블록투필: ", n_blocks_to_fill)
                     # Skip sequences that don't have any blocks to fill
                     if n_blocks_to_fill == 0:
                         continue
@@ -746,6 +772,8 @@ class MambaMixer2(MambaBase, CustomOp):
                         seq_idx,
                         block_idx_first_scheduled_token:block_idx_last_scheduled_token,
                     ]
+                    
+                    print("\n!!!이게숫자가하나씩빠져나온다-캐시블록투필: ", cache_blocks_to_fill)
 
                     # First chunk index for this sequence
                     if seq_idx == 0:
@@ -761,6 +789,8 @@ class MambaMixer2(MambaBase, CustomOp):
                     num_unaligned_computed_tokens = (
                         num_computed_tokens_p[seq_idx] % mamba_block_size
                     )
+                    
+                    print("넘-언어라인드-컴퓨티드-토큰: ", num_unaligned_computed_tokens)
 
                     if num_unaligned_computed_tokens > 0:
                         # If the number of computed tokens is not block aligned,
