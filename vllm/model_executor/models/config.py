@@ -295,11 +295,22 @@ class MambaModelConfig(VerifyAndUpdateConfig):
             "NemotronHForCausalLM",
             "Zamba2ForCausalLM",
         ]
+        
+        SHORTCONV_MODELS = [
+            "Lfm2ForCausalLM"
+        ]
+        
         if cache_config.enable_prefix_caching:
             if model_config.architecture in MAMBA2_MODELS:
                 logger.info(
                     "Warning: Prefix caching is currently enabled. "
                     "Its support for Mamba2 layers is experimental. "
+                    "Please report any issues you may observe."
+                )
+            elif model_config.architecture in SHORTCONV_MODELS:
+                logger.info(
+                    "Warning: Prefix caching is currently enabled. "
+                    "Its support for short conv is experimental. "
                     "Please report any issues you may observe."
                 )
             else:
@@ -345,6 +356,8 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
         else:
             kv_cache_dtype = STR_DTYPE_TO_TORCH_DTYPE[cache_config.cache_dtype]
 
+        print("\nkv_cache_dtype", kv_cache_dtype)
+
         # get attention page size (for 1 token)
         attn_page_size_1_token = FullAttentionSpec(
             block_size=1,
@@ -352,6 +365,8 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
             head_size=model_config.get_head_size(),
             dtype=kv_cache_dtype,
         ).page_size_bytes
+        
+        print("\nattn_page_size_1_token", attn_page_size_1_token)
 
         model_cls, _ = ModelRegistry.resolve_model_cls(
             model_config.architecture,
@@ -364,6 +379,9 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
             dtypes=model_cls.get_mamba_state_dtype_from_config(vllm_config),
             block_size=model_config.max_model_len,
         ).page_size_bytes
+
+        print("\nmamba_page_size", mamba_page_size)
+
 
         # Model may be marked as is_hybrid
         #  but mamba is skipped via config,
@@ -382,7 +400,10 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
         else:
             kernel_block_alignment_size = 16
 
-        if cache_config.enable_prefix_caching:
+        print("\nkernel_block_alignment_size", kernel_block_alignment_size)
+
+        print("모델 config", model_config)
+        if cache_config.enable_prefix_caching and model_config.model not in ['LiquidAI/LFM2-700M', 'LiquidAI/LFM2-350M', 'LiquidAI/LFM2-1.2B', 'LiquidAI/LFM2-2.6B']:
             # With prefix caching, select attention block size to
             # optimize for mamba kernel performance
 
@@ -405,11 +426,69 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
                 return a * b // gcd(a, b)
 
             base_chunk_size = model_config.get_mamba_chunk_size()
+            
+            print("\nHF mamba_chunk_size called base_chunk_size", base_chunk_size)
+            print("\nmamba_page_size", mamba_page_size)
+            
+            
             attn_tokens_per_mamba_state = cdiv(mamba_page_size, attn_page_size_1_token)
 
+            print("\nattn_tokens_per_mamba_state- page_size를 맞추기 위한 attn_token 갯수", attn_tokens_per_mamba_state)
+
             chunk_size = lcm(base_chunk_size, kernel_block_alignment_size)
+            
+            print("\nchunk_size- mamba_chunk_size를 결정하기 위한 임시변수(이건 최소공배수)", chunk_size)
+            
             attn_block_size = chunk_size * cdiv(attn_tokens_per_mamba_state, chunk_size)
+            
+            print("\ncdiv(attn_tokens_per_mamba_state, chunk_size)", cdiv(attn_tokens_per_mamba_state, chunk_size))
+            
+            print("\n결정된attn_block_size(하이브리드계산을 위한 임시변수)", attn_block_size)
+            
+            
             cache_config.mamba_block_size = attn_block_size
+            
+        elif cache_config.enable_prefix_caching and model_config.model in ['LiquidAI/LFM2-700M', 'LiquidAI/LFM2-350M', 'LiquidAI/LFM2-1.2B', 'LiquidAI/LFM2-2.6B']:
+        # 이거거나 non-pc와 같다
+        # 1. 맘바 따라하기
+            # from math import gcd
+
+            # def lcm(a, b):
+            #     return a * b // gcd(a, b)
+
+            # base_chunk_size = 2 # 16 # model_config.get_mamba_chunk_size()
+            
+            # print("\nHF mamba_chunk_size called base_chunk_size", base_chunk_size)
+            # print("\nmamba_page_size", mamba_page_size)
+            
+            
+            # attn_tokens_per_mamba_state = cdiv(mamba_page_size, attn_page_size_1_token)
+
+            # print("\nattn_tokens_per_mamba_state- page_size를 맞추기 위한 attn_token 갯수", attn_tokens_per_mamba_state)
+
+            # chunk_size = lcm(base_chunk_size, kernel_block_alignment_size)
+            
+            # print("\nchunk_size- mamba_chunk_size를 결정하기 위한 임시변수(이건 최소공배수)", chunk_size)
+            
+            # attn_block_size = chunk_size * cdiv(attn_tokens_per_mamba_state, chunk_size)
+            
+            # print("\ncdiv(attn_tokens_per_mamba_state, chunk_size)", cdiv(attn_tokens_per_mamba_state, chunk_size))
+            
+            # print("\n결정된attn_block_size(하이브리드계산을 위한 임시변수)", attn_block_size)
+            
+            
+            # cache_config.mamba_block_size = attn_block_size
+            
+            
+            #
+            # 2. non-pc 버전  - 이렇게하면  
+            attn_block_size = kernel_block_alignment_size * cdiv(
+                mamba_page_size, kernel_block_alignment_size * attn_page_size_1_token
+            )        
+            # LFM2용 - 여기서 일치시킨다
+            # !!! mamba_block_size를 lfm2에서 잘못된 이름이로 봐야된다. short_conv를 위한 block 사이즈다
+            cache_config.mamba_block_size = attn_block_size    
+            
         else:
             # Without prefix caching, select minimum valid attention block size
             # to minimize mamba state padding
@@ -421,20 +500,25 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
                 mamba_page_size, kernel_block_alignment_size * attn_page_size_1_token
             )
 
+
         # override attention block size if either (a) the
         # user has not set it or (b) the user has set it
         # too small.
         if cache_config.block_size is None or cache_config.block_size < attn_block_size:
+            print("\n원래의cache_config.block_size", cache_config.block_size)
             cache_config.block_size = attn_block_size
+            print("\n계산된 attn_block_size로 강제대입한cache_config.block_size", cache_config.block_size)
+            
             logger.info(
-                "Setting attention block size to %d tokens "
-                "to ensure that attention page size is >= mamba page size.",
+                "Setting attention(kv캐시) block size to %d tokens "
+                "to ensure that attention(kv캐시) page size is >= mamba page size.",
                 attn_block_size,
             )
 
         # compute new attention page size
         attn_page_size = cache_config.block_size * attn_page_size_1_token
 
+        print("\nattn_page_size = cache_config.block_size(이건 kv캐시용) * attn_page_size_1_token", attn_page_size)
         assert attn_page_size >= mamba_page_size
 
         if attn_page_size == mamba_page_size:
@@ -450,6 +534,7 @@ class HybridAttentionMambaModelConfig(VerifyAndUpdateConfig):
             mamba_padding_pct = (
                 100 * (attn_page_size - mamba_page_size) / mamba_page_size
             )
+            print("결국은 맘바패이지사이즈를 어텐션페이지사이즈와 동일하게 만드는 거였음")
             logger.info(
                 "Padding mamba page size by %.2f%% to ensure "
                 "that mamba page size and attention page size are "
