@@ -566,12 +566,6 @@ def causal_conv1d_fn(
     state_len = width - 1
     np2_statelen = triton.next_power_of_2(state_len)
 
-    # 그라는 이게 7개씩 계속 증가한다 [[50, 51, 52, 53, 54, 55, 56,  0,  0,  0,...
-    print("\n캐시인다이스: ", cache_indices)
-    print("\n캐시인다이스크기: ", cache_indices.size(0))
-    
-    print("\n쿼리스타트록: ", query_start_loc)
-    
     padded_batch = query_start_loc.size(0) - 1
     stride_x_dim = x.stride(0)
     stride_x_token = x.stride(1)

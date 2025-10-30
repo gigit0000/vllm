@@ -247,13 +247,7 @@ class MambaSpec(KVCacheSpec):
             prod(shape) * get_dtype_size(dtype)
             for (shape, dtype) in zip(self.shapes, self.dtypes)
         )
-        
-        # print("\nkv_cache_if.py-shape은: ", self.shapes)        
-        # print("\nkv_cache_if.py-page_size: ", page_size)
         if self.page_size_padded is not None:
-
-            # print("\nkv_cache_if.py-self.page_size_padded(패드된 후의 크기다): ", self.page_size_padded)
-
             assert self.page_size_padded >= page_size
             return self.page_size_padded
         return page_size
