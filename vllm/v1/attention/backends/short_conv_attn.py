@@ -119,26 +119,12 @@ class ShortConvAttentionMetadataBuilder(
                 self.device
             )
 
-            block_idx_last_computed_token = (
-                cdiv(num_computed_tokens, mamba_block_size) - 1
-            )
-
-            block_idx_first_scheduled_token = cdiv(
-                num_computed_tokens, mamba_block_size
-            )
-
-            block_idx_last_scheduled_token = (
-                cdiv(common_attn_metadata.seq_lens, mamba_block_size) - 1
-            )
-
             block_idx_last_computed_token = block_idx_last_computed_token.clamp(min=0)
 
         else:
             # Always return just a single block per each request:
             state_indices_tensor = common_attn_metadata.block_table_tensor[:, 0]
             # Additional cache-related varaiables:
-            block_idx_last_scheduled_token = None
-            block_idx_last_computed_token = None
 
         num_decodes, num_prefills, num_decode_tokens, num_prefill_tokens = (
             split_decodes_and_prefills(
@@ -158,18 +144,9 @@ class ShortConvAttentionMetadataBuilder(
                 common_attn_metadata.query_start_loc.device
             )
 
-            query_start_loc_p = (
-                common_attn_metadata.query_start_loc[-num_prefills - 1 :]
-                - num_decode_tokens
-            )
-
             if self.vllm_config.cache_config.enable_prefix_caching:
                 assert num_computed_tokens is not None
                 num_computed_tokens_p = num_computed_tokens[
-                    num_reqs - num_prefills : num_reqs
-                ]
-                assert block_idx_first_scheduled_token is not None
-                block_idx_first_scheduled_token_p = block_idx_first_scheduled_token[
                     num_reqs - num_prefills : num_reqs
                 ]
 
