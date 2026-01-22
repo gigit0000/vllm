@@ -155,6 +155,34 @@ class ShortConvAttentionMetadataBuilder(
             )
 
         elif (
+            num_decodes >  self.decode_cudagraph_max_bs
+            and self.compilation_config.full_cuda_graph
+        ):
+            num_input_tokens = self.vllm_config.pad_for_cudagraph(num_decodes)
+            self.state_indices_tensor[:num_decodes].copy_(
+                state_indices_tensor, non_blocking=False
+            )
+            state_indices_tensor = self.state_indices_tensor[:num_input_tokens]
+            state_indices_tensor[num_decodes:] = PAD_SLOT_ID
+
+            if self.vllm_config.cache_config.enable_prefix_caching:
+                self.block_idx_last_scheduled_token[:num_decodes].copy_(
+                    block_idx_last_scheduled_token, non_blocking=False
+                )
+                block_idx_last_scheduled_token = self.block_idx_last_scheduled_token[
+                    :num_input_tokens
+                ]
+                block_idx_last_scheduled_token[num_decodes:] = 0
+
+                self.block_idx_last_computed_token[:num_decodes].copy_(
+                    block_idx_last_computed_token, non_blocking=False
+                )
+                block_idx_last_computed_token = self.block_idx_last_computed_token[
+                    :num_input_tokens
+                ]
+                block_idx_last_computed_token[num_decodes:] = 0
+
+        elif (
             num_decodes <= self.decode_cudagraph_max_bs
             and self.compilation_config.full_cuda_graph
         ):
