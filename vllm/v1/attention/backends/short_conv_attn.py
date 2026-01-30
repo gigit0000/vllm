@@ -110,6 +110,17 @@ class ShortConvAttentionMetadataBuilder(
         block_idx_first_scheduled_token = None
         block_idx_first_scheduled_token_p = None
 
+        query_start_loc_np = np.empty(num_reqs + 1, dtype=np.int32)
+        query_start_loc_np[0] = 0
+        np.cumsum(num_scheduled_tokens, out=query_start_loc_np[1:])
+        input_buffers.query_start_loc[0] = 0
+        torch.cumsum(
+            seq_lens, dim=0, out=input_buffers.query_start_loc[1 : num_reqs + 1]
+        )
+
+        input_buffers.query_start_loc[num_reqs + 1 :] = num_tokens
+        query_start_loc = input_buffers.query_start_loc[: num_reqs + 1]
+
         if self.vllm_config.cache_config.enable_prefix_caching:
             # Return a tensor of shape (#requests, #max blocks)
             state_indices_tensor = common_attn_metadata.block_table_tensor
@@ -120,7 +131,13 @@ class ShortConvAttentionMetadataBuilder(
             )
 
             block_idx_last_computed_token = block_idx_last_computed_token.clamp(min=0)
-
+            query_start_loc_np = np.arange(num_reqs + 1, dtype=np.int32) * num_tokens_per_req
+            query_start_loc_np[-1] = num_tokens
+            query_start_loc_cpu = torch.from_numpy(query_start_loc_np)Expand commentComment on line R234Resolved
+            input_buffers.query_start_loc[: num_reqs + 1] = query_start_loc_cpu
+            input_buffers.query_start_loc[num_reqs + 1 :] = num_tokens
+            query_start_loc = input_buffers.query_start_loc[: num_reqs + 1]
+        
         else:
             # Always return just a single block per each request:
             state_indices_tensor = common_attn_metadata.block_table_tensor[:, 0]
